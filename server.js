@@ -11,12 +11,18 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection
-// Gantilah URL di bawah ini dengan URL MongoDB Atlas Anda jika diperlukan
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://rafanparsa_db_user:PutraRustaman190@cluster0.pxhxj08.mongodb.net/?appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error('ERROR: MONGODB_URI tidak ditemukan di Environment Variables!');
+}
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Terhubung ke MongoDB'))
-  .catch(err => console.error('Gagal terhubung ke MongoDB:', err));
+  .then(() => console.log('Terhubung ke MongoDB Atlas'))
+  .catch(err => {
+    console.error('Gagal terhubung ke MongoDB:');
+    console.error(err);
+  });
 
 // Comment Schema
 const commentSchema = new mongoose.Schema({
