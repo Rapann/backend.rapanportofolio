@@ -37,6 +37,71 @@ const commentSchema = new mongoose.Schema({
 
 const Comment = mongoose.model('Comment', commentSchema);
 
+// --- NEW SCHEMAS ---
+
+// Biodata Schema
+const biodataSchema = new mongoose.Schema({
+  name: String,
+  subtitle: String,
+  description: String,
+  quote: String,
+  profileImg: String
+});
+const Biodata = mongoose.model('Biodata', biodataSchema);
+
+// Education Schema
+const educationSchema = new mongoose.Schema({
+  schoolName: String,
+  level: String, // TK, SD, SMP, SMA
+  logo: String
+});
+const Education = mongoose.model('Education', educationSchema);
+
+// Project Schema
+const projectSchema = new mongoose.Schema({
+  title: String,
+  category: String,
+  description: String,
+  mediaUrl: String,
+  mediaType: { type: String, enum: ['image', 'video'] },
+  link: String // Optional external link
+});
+const Project = mongoose.model('Project', projectSchema);
+
+// Journey/Achievement Schema
+const achievementSchema = new mongoose.Schema({
+  title: String,
+  date: String,
+  description: String,
+  side: { type: String, enum: ['left', 'right'] }
+});
+const Achievement = mongoose.model('Achievement', achievementSchema);
+
+// Skills Schema
+const skillSchema = new mongoose.Schema({
+  name: String,
+  logo: String
+});
+const Skill = mongoose.model('Skill', skillSchema);
+
+// Documentation Schema
+const documentationSchema = new mongoose.Schema({
+  title: String,
+  date: String,
+  imgUrl: String,
+  link: String
+});
+const Documentation = mongoose.model('Documentation', documentationSchema);
+
+// Contact Schema
+const contactSchema = new mongoose.Schema({
+  platform: String,
+  url: String,
+  iconSvg: String,
+  label: String
+});
+const Contact = mongoose.model('Contact', contactSchema);
+
 // Simple Admin Auth Middleware
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
@@ -95,6 +160,58 @@ app.delete('/api/comments/:id', authMiddleware, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// --- GENERIC CRUD HELPER ---
+const createCrudRoutes = (model, path) => {
+  // GET all
+  app.get(`/api/${path}`, async (req, res) => {
+    try {
+      const data = await model.find();
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST new (Protected)
+  app.post(`/api/${path}`, authMiddleware, async (req, res) => {
+    try {
+      const newItem = new model(req.body);
+      const savedItem = await newItem.save();
+      res.status(201).json(savedItem);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // PUT update (Protected)
+  app.put(`/api/${path}/:id`, authMiddleware, async (req, res) => {
+    try {
+      const updatedItem = await model.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      res.json(updatedItem);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // DELETE (Protected)
+  app.delete(`/api/${path}/:id`, authMiddleware, async (req, res) => {
+    try {
+      await model.findByIdAndDelete(req.params.id);
+      res.json({ message: 'Deleted successfully' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+};
+
+createCrudRoutes(Biodata, 'biodata');
+createCrudRoutes(Education, 'education');
+createCrudRoutes(Project, 'projects');
+createCrudRoutes(Achievement, 'achievements');
+createCrudRoutes(Skill, 'skills');
+createCrudRoutes(Documentation, 'documentation');
+createCrudRoutes(Contact, 'contacts');
 
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
