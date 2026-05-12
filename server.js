@@ -7,7 +7,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ["https://madebyrafan.vercel.app", "http://localhost:5000", "http://127.0.0.1:5500"],
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.static('./')); // Serve static files from current directory
 
