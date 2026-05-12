@@ -12,7 +12,7 @@ app.use(express.json());
 
 // MongoDB Connection
 // Gantilah URL di bawah ini dengan URL MongoDB Atlas Anda jika diperlukan
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/portfolio_comments';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://rafanparsa_db_user:PutraRustaman190@cluster0.pxhxj08.mongodb.net/?appName=Cluster0';
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Terhubung ke MongoDB'))
