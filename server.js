@@ -3,8 +3,12 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 // Middleware
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['*'];
@@ -87,6 +91,12 @@ const commentSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Admin Schema
+const adminSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true }
+});
+
 // --- MODELS ---
 const Profile = mongoose.model('Profile', profileSchema);
 const Education = mongoose.model('Education', educationSchema);
@@ -95,8 +105,56 @@ const Achievement = mongoose.model('Achievement', achievementSchema);
 const Skill = mongoose.model('Skill', skillSchema);
 const Documentation = mongoose.model('Documentation', documentationSchema);
 const Comment = mongoose.model('Comment', commentSchema);
+const Admin = mongoose.model('Admin', adminSchema);
+
+// --- AUTH MIDDLEWARE ---
+const auth = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ message: 'Akses ditolak. Silakan login.' });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.adminId = decoded.id;
+    next();
+  } catch (err) {
+    res.status(401).json({ message: 'Token tidak valid.' });
+  }
+};
 
 // --- ROUTES ---
+
+// Auth Routes
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const admin = await Admin.findOne({ username });
+    if (!admin) return res.status(400).json({ message: 'Username atau password salah.' });
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) return res.status(400).json({ message: 'Username atau password salah.' });
+
+    const token = jwt.sign({ id: admin._id }, JWT_SECRET, { expiresIn: '1d' });
+    res.json({ token, username: admin.username });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Register first admin (temporary, remove after use or protect)
+app.post('/api/auth/register-initial', async (req, res) => {
+  try {
+    const count = await Admin.countDocuments();
+    if (count > 0) return res.status(400).json({ message: 'Admin sudah terdaftar.' });
+
+    const { username, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newAdmin = new Admin({ username, password: hashedPassword });
+    await newAdmin.save();
+    res.status(201).json({ message: 'Admin pertama berhasil didaftarkan.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // Helper for CRUD
 const createCrudRoutes = (model, path) => {
@@ -109,7 +167,7 @@ const createCrudRoutes = (model, path) => {
     }
   });
 
-  app.post(`/api/${path}`, async (req, res) => {
+  app.post(`/api/${path}`, auth, async (req, res) => {
     try {
       const newItem = new model(req.body);
       const savedItem = await newItem.save();
@@ -119,7 +177,7 @@ const createCrudRoutes = (model, path) => {
     }
   });
 
-  app.put(`/api/${path}/:id`, async (req, res) => {
+  app.put(`/api/${path}/:id`, auth, async (req, res) => {
     try {
       const updatedItem = await model.findByIdAndUpdate(req.params.id, req.body, { new: true });
       res.json(updatedItem);
@@ -128,7 +186,7 @@ const createCrudRoutes = (model, path) => {
     }
   });
 
-  app.delete(`/api/${path}/:id`, async (req, res) => {
+  app.delete(`/api/${path}/:id`, auth, async (req, res) => {
     try {
       await model.findByIdAndDelete(req.params.id);
       res.json({ message: 'Item deleted' });
@@ -155,7 +213,7 @@ app.get('/api/profile', async (req, res) => {
   }
 });
 
-app.put('/api/profile', async (req, res) => {
+app.put('/api/profile', auth, async (req, res) => {
   try {
     let profile = await Profile.findOne();
     if (profile) {
@@ -180,6 +238,15 @@ app.get('/api/comments', async (req, res) => {
   }
 });
 
+app.delete('/api/comments/:id', auth, async (req, res) => {
+  try {
+    await Comment.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Comment deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.post('/api/comments', async (req, res) => {
   const comment = new Comment(req.body);
   try {
@@ -193,3 +260,5 @@ app.post('/api/comments', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 });
+
+module.exports = app;
