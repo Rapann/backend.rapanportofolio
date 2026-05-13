@@ -126,33 +126,47 @@ app.get('/', (req, res) => {
 // Auth Routes
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  console.log(`Login attempt for username: ${username}`); // Debugging
+  const envUser = process.env.ADMIN_USERNAME || 'admin';
+  const envPass = process.env.ADMIN_PASSWORD || 'admin123';
+
+  console.log(`Login attempt for username: ${username}`);
 
   try {
+    // 1. Cek kredensial dari environment variables (Prioritas)
+    if (username === envUser && password === envPass) {
+      const token = jwt.sign({ id: 'static-admin' }, JWT_SECRET, { expiresIn: '1d' });
+      console.log('Login successful (via ENV)');
+      return res.json({ 
+        token, 
+        username: envUser,
+        message: 'Login berhasil (ENV)'
+      });
+    }
+
+    // 2. Fallback ke database jika ENV tidak cocok
     const admin = await Admin.findOne({ username });
-    if (!admin) {
-      console.log('User not found');
-      return res.status(400).json({ message: 'Username atau password salah.' });
+    if (admin) {
+      const isMatch = await bcrypt.compare(password, admin.password);
+      if (isMatch) {
+        const token = jwt.sign({ id: admin._id }, JWT_SECRET, { expiresIn: '1d' });
+        console.log('Login successful (via DB)');
+        return res.json({ 
+          token, 
+          username: admin.username,
+          message: 'Login berhasil (DB)'
+        });
+      }
     }
 
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) {
-      console.log('Password mismatch');
-      return res.status(400).json({ message: 'Username atau password salah.' });
-    }
+    console.log('Invalid credentials');
+    return res.status(400).json({ message: 'Username atau password salah.' });
 
-    const token = jwt.sign({ id: admin._id }, JWT_SECRET, { expiresIn: '1d' });
-    console.log('Login successful');
-    res.json({ 
-      token, 
-      username: admin.username,
-      message: 'Login berhasil'
-    });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
   }
 });
+
 
 
 // Register first admin (temporary, remove after use or protect)
