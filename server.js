@@ -7,105 +7,170 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['*'];
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  console.error('ERROR: MONGODB_URI tidak ditemukan di Environment Variables!');
-}
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/portfolio_db';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Terhubung ke MongoDB Atlas'))
-  .catch(err => {
-    console.error('Gagal terhubung ke MongoDB:');
-    console.error(err);
-  });
+  .then(() => console.log('Terhubung ke MongoDB'))
+  .catch(err => console.error('Gagal terhubung ke MongoDB:', err));
 
-// Comment Schema
+// --- SCHEMAS ---
+
+// Profile Schema
+const profileSchema = new mongoose.Schema({
+  name: String,
+  subtitle: String,
+  description: String,
+  quote: String,
+  profileImg: String
+});
+
+// Education Schema
+const educationSchema = new mongoose.Schema({
+  institution: String,
+  level: String,
+  logo: String,
+  order: Number
+});
+
+// Project Schema
+const projectSchema = new mongoose.Schema({
+  title: String,
+  category: String,
+  description: String,
+  media: String,
+  mediaType: { type: String, enum: ['image', 'video'] },
+  link: String,
+  order: Number
+});
+
+// Achievement Schema
+const achievementSchema = new mongoose.Schema({
+  date: String,
+  title: String,
+  description: String,
+  order: Number
+});
+
+// Skill Schema
+const skillSchema = new mongoose.Schema({
+  name: String,
+  icon: String,
+  order: Number
+});
+
+// Documentation Schema
+const documentationSchema = new mongoose.Schema({
+  title: String,
+  date: String,
+  media: String,
+  link: String,
+  order: Number
+});
+
+// Comment Schema (Existing)
 const commentSchema = new mongoose.Schema({
   name: { type: String, required: true },
   message: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 
+// --- MODELS ---
+const Profile = mongoose.model('Profile', profileSchema);
+const Education = mongoose.model('Education', educationSchema);
+const Project = mongoose.model('Project', projectSchema);
+const Achievement = mongoose.model('Achievement', achievementSchema);
+const Skill = mongoose.model('Skill', skillSchema);
+const Documentation = mongoose.model('Documentation', documentationSchema);
 const Comment = mongoose.model('Comment', commentSchema);
 
-// Biodata Schema
-const biodataSchema = new mongoose.Schema({
-  name: String,
-  subtitle: String,
-  description: String,
-  quote: String,
-  profileImage: String
-});
-const Biodata = mongoose.model('Biodata', biodataSchema);
+// --- ROUTES ---
 
-// Education Schema
-const educationSchema = new mongoose.Schema({
-  schoolName: String,
-  level: String, // TK, SD, SMP, SMA
-  logo: String
-});
-const Education = mongoose.model('Education', educationSchema);
+// Helper for CRUD
+const createCrudRoutes = (model, path) => {
+  app.get(`/api/${path}`, async (req, res) => {
+    try {
+      const data = await model.find().sort({ order: 1, createdAt: -1 });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 
-// Project Schema
-const projectSchema = new mongoose.Schema({
-  title: String,
-  category: String, // desain-grafis, video, fotografi, website
-  description: String,
-  mediaUrl: String,
-  mediaType: String, // image, video
-  link: String // optional link for website projects
-});
-const Project = mongoose.model('Project', projectSchema);
+  app.post(`/api/${path}`, async (req, res) => {
+    try {
+      const newItem = new model(req.body);
+      const savedItem = await newItem.save();
+      res.status(201).json(savedItem);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
 
-// Achievement (Journey) Schema
-const achievementSchema = new mongoose.Schema({
-  date: String,
-  title: String,
-  description: String,
-  side: { type: String, enum: ['left', 'right'], default: 'left' }
-});
-const Achievement = mongoose.model('Achievement', achievementSchema);
+  app.put(`/api/${path}/:id`, async (req, res) => {
+    try {
+      const updatedItem = await model.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      res.json(updatedItem);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
 
-// Skill Schema
-const skillSchema = new mongoose.Schema({
-  name: String,
-  logo: String
-});
-const Skill = mongoose.model('Skill', skillSchema);
-
-// Simple Admin Auth Middleware
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-
-const authMiddleware = (req, res, next) => {
-  const password = req.headers['x-admin-password'];
-  if (password === ADMIN_PASSWORD) {
-    next();
-  } else {
-    res.status(401).json({ message: 'Unauthorized: Invalid admin password' });
-  }
+  app.delete(`/api/${path}/:id`, async (req, res) => {
+    try {
+      await model.findByIdAndDelete(req.params.id);
+      res.json({ message: 'Item deleted' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 };
 
-// Routes
-app.get('/', (req, res) => {
-  res.send('Portfolio API is running...');
-});
+// Register routes
+createCrudRoutes(Education, 'education');
+createCrudRoutes(Project, 'projects');
+createCrudRoutes(Achievement, 'achievements');
+createCrudRoutes(Skill, 'skills');
+createCrudRoutes(Documentation, 'documentation');
 
-// Admin Login (Simple check)
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    res.json({ success: true, message: 'Login successful' });
-  } else {
-    res.status(401).json({ success: false, message: 'Invalid password' });
+// Profile specific (usually only one)
+app.get('/api/profile', async (req, res) => {
+  try {
+    const profile = await Profile.findOne();
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
-// GET all comments
+app.put('/api/profile', async (req, res) => {
+  try {
+    let profile = await Profile.findOne();
+    if (profile) {
+      profile = await Profile.findByIdAndUpdate(profile._id, req.body, { new: true });
+    } else {
+      profile = new Profile(req.body);
+      await profile.save();
+    }
+    res.json(profile);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// Comments (Existing)
 app.get('/api/comments', async (req, res) => {
   try {
     const comments = await Comment.find().sort({ createdAt: -1 });
@@ -115,13 +180,8 @@ app.get('/api/comments', async (req, res) => {
   }
 });
 
-// POST a new comment
 app.post('/api/comments', async (req, res) => {
-  const comment = new Comment({
-    name: req.body.name,
-    message: req.body.message
-  });
-
+  const comment = new Comment(req.body);
   try {
     const newComment = await comment.save();
     res.status(201).json(newComment);
@@ -130,170 +190,6 @@ app.post('/api/comments', async (req, res) => {
   }
 });
 
-// DELETE a comment (Protected)
-app.delete('/api/comments/:id', authMiddleware, async (req, res) => {
-  try {
-    const comment = await Comment.findByIdAndDelete(req.params.id);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
-    res.json({ message: 'Comment deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- BIODATA ROUTES ---
-app.get('/api/biodata', async (req, res) => {
-  try {
-    const biodata = await Biodata.findOne();
-    res.json(biodata);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/biodata', authMiddleware, async (req, res) => {
-  try {
-    let biodata = await Biodata.findOne();
-    if (biodata) {
-      Object.assign(biodata, req.body);
-      await biodata.save();
-    } else {
-      biodata = new Biodata(req.body);
-      await biodata.save();
-    }
-    res.json(biodata);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// --- EDUCATION ROUTES ---
-app.get('/api/education', async (req, res) => {
-  try {
-    const education = await Education.find();
-    res.json(education);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/education', authMiddleware, async (req, res) => {
-  const education = new Education(req.body);
-  try {
-    const newEducation = await education.save();
-    res.status(201).json(newEducation);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.delete('/api/education/:id', authMiddleware, async (req, res) => {
-  try {
-    await Education.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Education deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- PROJECT ROUTES ---
-app.get('/api/projects', async (req, res) => {
-  try {
-    const projects = await Project.find();
-    res.json(projects);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/projects', authMiddleware, async (req, res) => {
-  const project = new Project(req.body);
-  try {
-    const newProject = await project.save();
-    res.status(201).json(newProject);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.put('/api/projects/:id', authMiddleware, async (req, res) => {
-  try {
-    const project = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(project);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.delete('/api/projects/:id', authMiddleware, async (req, res) => {
-  try {
-    await Project.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Project deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- ACHIEVEMENT ROUTES ---
-app.get('/api/achievements', async (req, res) => {
-  try {
-    const achievements = await Achievement.find().sort({ date: -1 });
-    res.json(achievements);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/achievements', authMiddleware, async (req, res) => {
-  const achievement = new Achievement(req.body);
-  try {
-    const newAchievement = await achievement.save();
-    res.status(201).json(newAchievement);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.delete('/api/achievements/:id', authMiddleware, async (req, res) => {
-  try {
-    await Achievement.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Achievement deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- SKILL ROUTES ---
-app.get('/api/skills', async (req, res) => {
-  try {
-    const skills = await Skill.find();
-    res.json(skills);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/skills', authMiddleware, async (req, res) => {
-  const skill = new Skill(req.body);
-  try {
-    const newSkill = await skill.save();
-    res.status(201).json(newSkill);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.delete('/api/skills/:id', authMiddleware, async (req, res) => {
-  try {
-    await Skill.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Skill deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 });
-
-module.exports = app;
