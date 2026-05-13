@@ -123,6 +123,11 @@ const auth = (req, res, next) => {
 
 // --- ROUTES ---
 
+// Root Route for Verification
+app.get('/', (req, res) => {
+  res.send('Backend Portofolio Rafan sedang berjalan... Silakan akses /api untuk data.');
+});
+
 // Auth Routes
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
