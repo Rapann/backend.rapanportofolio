@@ -126,19 +126,34 @@ app.get('/', (req, res) => {
 // Auth Routes
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
+  console.log(`Login attempt for username: ${username}`); // Debugging
+
   try {
     const admin = await Admin.findOne({ username });
-    if (!admin) return res.status(400).json({ message: 'Username atau password salah.' });
+    if (!admin) {
+      console.log('User not found');
+      return res.status(400).json({ message: 'Username atau password salah.' });
+    }
 
     const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) return res.status(400).json({ message: 'Username atau password salah.' });
+    if (!isMatch) {
+      console.log('Password mismatch');
+      return res.status(400).json({ message: 'Username atau password salah.' });
+    }
 
     const token = jwt.sign({ id: admin._id }, JWT_SECRET, { expiresIn: '1d' });
-    res.json({ token, username: admin.username });
+    console.log('Login successful');
+    res.json({ 
+      token, 
+      username: admin.username,
+      message: 'Login berhasil'
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
   }
 });
+
 
 // Register first admin (temporary, remove after use or protect)
 app.post('/api/auth/register-initial', async (req, res) => {
